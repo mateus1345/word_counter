@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="stylesheet" href="node_modules/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="styles.css">
+
+    <title>Word Counter Page</title>
+</head>
+
+<body>
+    <div class="header-main text-center">
+        <p class="header-main-title">Word counter</p>
+        <p class="header-main-subtitle"> Check how bad is your vocabulary</p>
+        <img class="rounded header-image" src="assets/images/logo.png" alt="image">
+    </div>
+    <div class="container" id="main_container">
+        <div class="mb-3 mt-3">
+            <textarea class="form-control" id="textInput" rows="12" cols="50"
+                placeholder="Add text here and then click 'Translate' button."></textarea>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="paragraphScope">
+            <label class="form-check-label" for="paragraphScope">
+                Analyze for each paragraph?
+            </label>
+        </div>
+        <div class="button-center">
+            <button type="submit center" class="btn btn-primary" onclick="processText()">Process</button>
+        </div>
+    </div>
+
+    <script>
+        class Color {
+            constructor(red, green, blue) {
+                this.red = red
+                this.green = green
+                this.blue = blue
+            }
+
+            toHexa() {
+                let red_hexa = this.red.toString(16).padStart(2, '0')
+                let green_hexa = this.green.toString(16).padStart(2, '0')
+                let blue_hexa = this.blue.toString(16).padStart(2, '0')
+                return `#${red_hexa}${green_hexa}${blue_hexa}`
+            }
+        }
+
+
+        class Gradient {
+            constructor(initial_color, final_color, steps) {
+                this.colors = []
+
+                let diff_red = final_color.red - initial_color.red
+                let diff_green = final_color.green - initial_color.green
+                let diff_blue = final_color.blue - initial_color.blue
+
+                for (let step = 0; step < steps; step++) {
+                    let percentage = step / (steps - 1)
+                    let color_red = parseInt(initial_color.red + (percentage * diff_red))
+                    let color_green = parseInt(initial_color.green + (percentage * diff_green))
+                    let color_blue = parseInt(initial_color.blue + (percentage * diff_blue))
+                    this.colors.push(new Color(color_red, color_green, color_blue))
+                }
+            }
+        }
+
+
+        class Word {
+            constructor(text, frequency, color) {
+                this.text = text
+                this.frequency = frequency
+                this.color = color
+            }
+        }
+
+        class TextPiece {
+            constructor(text, text_processor) {
+                this.raw_text = text
+                this.text_processor = text_processor
+                this.processed_text = this.text_processor.process(this.raw_text)
+                this.words = []
+            }
+
+            getWordsSortedByFrequency() {
+                let sorted_words = [...this.words].sort(
+                    (first, second) => second.frequency - first.frequency)
+                return sorted_words
+            }
+
+            getWord(raw_word) {
+                let filtered_words = this.words.filter(word => word.text === raw_word)
+                return filtered_words.length > 0 ? filtered_words[0] : undefined
+            }
+
+            getMaxFrequency() {
+                return this.getWordsSortedByFrequency()[0].frequency
+            }
+
+            paintWords() {
+                const red = new Color(255, 0, 0)
+                const green = new Color(0, 255, 0)
+                let max_frequency = this.getMaxFrequency()
+                let gradient = new Gradient(green, red, max_frequency)
+
+                this.words.forEach(word => {
+                    word.color = gradient.colors[word.frequency - 1]
+                })
+            }
+        }
+
+        class Paragraph extends TextPiece {
+            constructor(text, text_processor) {
+                super(text, text_processor)
+                this.countWords()
+                this.paintWords()
+            }
+
+            countWords() {
+                this.text_processor.splitWords(this.processed_text).forEach(raw_word => {
+                    let word = this.getWord(raw_word)
+                    if (word) {
+                        word.frequency += 1
+                    } else {
+                        this.words.push(new Word(raw_word, 1))
+                    }
+                })
+            }
+        }
+
+        class Text extends TextPiece {
+            constructor(text, text_processor) {
+                super(text, text_processor)
+                this.paragraphs = []
+                let text_paragraphs = this.text_processor.splitParagraphs(this.processed_text)
+                text_paragraphs.forEach(
+                    paragraph => this.paragraphs.push(new Paragraph(paragraph, text_processor)))
+                this.countWords()
+                this.paintWords()
+            }
+
+            getParagraph(paragraph_text) {
+                let filtered_paragraphs = this.paragraphs.filter(paragraph => paragraph.raw_text == paragraph_text)
+                return filtered_paragraphs.length > 0 ? filtered_paragraphs[0] : undefined
+            }
+
+            countWords() {
+                this.paragraphs.forEach(paragraph => {
+                    paragraph.words.forEach(word => {
+                        let text_word = this.getWord(word.text)
+                        if (text_word) {
+                            text_word.frequency += word.frequency
+                        } else {
+                            this.words.push(new Word(word.text, word.frequency))
+                        }
+                    })
+                })
+            }
+        }
+
+        function createTextProcessor() {
+            function process(text) {
+                processed_text = removePunctuation(text)
+                processed_text = removeSpecialCharacters(processed_text)
+                processed_text = removeMultipleNewLines(processed_text)
+                return processed_text
+            }
+
+            function removeSpecialCharacters(text) {
+                return text.replace(/[\/#$%\^&\*{=_`~@\+><\[\+]/g, '')
+            }
+
+            function removeMultipleNewLines(text) {
+                return text.replace(/\n{2,}/g, '\n')
+            }
+
+            function removePunctuation(text) {
+                let processed_text = text.replace(/\.{3}/g, '')
+                processed_text = processed_text.replace(/\s-\s/g, ' ')
+                processed_text = processed_text.replace(
+                    /[\.\,\!;:}()\?\]\"]/g, '')
+                // processed_text = processed_text.replace(/\s{2,}/g, " ")
+                return processed_text
+            }
+
+            function splitWords(text) {
+                return text.split(' ')
+            }
+
+            function splitParagraphs(text) {
+                return text.split('\n')
+            }
+
+            return {
+                removePunctuation,
+                removeSpecialCharacters,
+                removeMultipleNewLines,
+                process,
+                splitWords,
+                splitParagraphs
+            }
+        }
+
+        function cleanResultArea() {
+            let main_container = document.getElementById('main_container')
+
+            let printed_text_div = document.getElementById('printed_text_div')
+            if (printed_text_div) {
+                main_container.removeChild(printed_text_div)
+            }
+
+            let frequencies_table_div = document.getElementById('frequencies_table_div')
+            if (frequencies_table_div) {
+                main_container.removeChild(frequencies_table_div)
+            }
+        }
+
+        function createArea(area_id) {
+            let area = document.createElement('div')
+            area.classList.add('mt-5')
+            area.classList.add('mb-5')
+            area.setAttribute('id', area_id)
+            return area
+        }
+
+        function createPrintedWord(content, color) {
+            let word_element = document.createElement("span")
+            let element_content = document.createTextNode(content)
+            word_element.style.color = color
+            word_element.appendChild(element_content)
+            return word_element
+        }
+
+        function createPrintedText(text, is_paragraph_scope) {
+            let text_processor = text.text_processor
+            let input_text = text.raw_text
+
+            let main_container = document.getElementById('main_container')
+            let new_div = createArea('printed_text_div')
+
+            let input_paragraphs = text_processor.splitParagraphs(
+                text_processor.removeMultipleNewLines(input_text))
+            for (const input_paragraph of input_paragraphs) {
+                let paragraph_element = document.createElement('P')
+                let input_words = text_processor.splitWords(input_paragraph)
+                for (const input_word of input_words) {
+                    let processed_word = text_processor.process(input_word)
+                    let word
+                    if (is_paragraph_scope) {
+                        let processed_paragraph = text_processor.process(input_paragraph)
+                        let paragraph = text.getParagraph(processed_paragraph)
+                        word = paragraph.getWord(processed_word)
+                    } else {
+                        word = text.getWord(processed_word)
+                    }
+                    console.log(word)
+                    let word_color = word.color.toHexa()
+                    let word_element = createPrintedWord(input_word + ' ', word_color)
+                    paragraph_element.appendChild(word_element)
+                }
+                new_div.appendChild(paragraph_element)
+            }
+            return new_div
+        }
+
+        function createFrequencyTable(text) {
+            let table_area = createArea('frequencies_table_div')
+
+            let table = document.createElement('table')
+            let thead = document.createElement('thead')
+            let tbody = document.createElement('tbody')
+
+            let header_row = document.createElement('tr')
+            let word_col = document.createElement('th')
+            let freq_col = document.createElement('th')
+            word_col.innerHTML = "Word"
+            freq_col.innerHTML = "Frequency"
+            header_row.appendChild(word_col)
+            header_row.appendChild(freq_col)
+            thead.appendChild(header_row)
+
+            most_present_words = text.getWordsSortedByFrequency().slice(0, 10)
+            for (const word of most_present_words) {
+                let content_row = document.createElement('tr')
+                let word_text = document.createElement('td')
+                word_text.innerHTML = word.text
+                let word_frequency = document.createElement('td')
+                word_frequency.innerHTML = word.frequency
+                content_row.appendChild(word_text)
+                content_row.appendChild(word_frequency)
+                tbody.appendChild(content_row)
+            }
+
+            table.appendChild(thead)
+            table.appendChild(tbody)
+
+            table_area.appendChild(table)
+            return table_area
+        }
+
+        function processText() {
+            let main_container = document.getElementById('main_container')
+            let paragraph_scope = document.getElementById('paragraphScope').checked
+            let text_area = document.getElementById("textInput")
+            let input_text = text_area.value
+            let text_processor = createTextProcessor()
+            let text = new Text(input_text, text_processor)
+
+            cleanResultArea()
+            main_container.appendChild(createPrintedText(text, paragraph_scope))
+            main_container.appendChild(createFrequencyTable(text, paragraph_scope))
+        }
+
+    </script>
+    <script src="node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
